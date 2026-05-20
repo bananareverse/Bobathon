@@ -7,7 +7,9 @@ import Header               from './components/Header';
 import Sidebar              from './components/Sidebar';
 import ChatWindow           from './components/ChatWindow';
 import InputArea            from './components/InputArea';
+import ExportShareModal     from './components/ExportShareModal';
 import LoginPage            from './pages/LoginPage';
+import SharePage            from './pages/SharePage';
 
 // ── Loading splash ─────────────────────────────────────────────────────────────
 function LoadingScreen({ isDark }) {
@@ -21,13 +23,14 @@ function LoadingScreen({ isDark }) {
   );
 }
 
-// ── Main app ───────────────────────────────────────────────────────────────────
+// ── Main authenticated app ─────────────────────────────────────────────────────
 function ChatApp({ user, signOut, isDark, onToggleDark }) {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen]   = useState(false);
+  const [showExport,  setShowExport]    = useState(false);
 
   const conv = useConversations(user.id);
 
-  const { messages, isLoading, isStreaming, sendQuestion, retry } = useChat({
+  const { messages, isLoading, isStreaming, followUps, sendQuestion, regenerate, retry } = useChat({
     conversationId: conv.activeId,
     onTitleUpdate:  (cid, title) => conv.updateTitle(cid, title),
     onTouch:        (cid)        => conv.touch(cid),
@@ -35,7 +38,6 @@ function ChatApp({ user, signOut, isDark, onToggleDark }) {
 
   async function handleSend(question) {
     let cid = conv.activeId;
-    // If no conversation exists yet, create one on the fly
     if (!cid) {
       const newConv = await conv.create();
       cid = newConv.id;
@@ -53,6 +55,8 @@ function ChatApp({ user, signOut, isDark, onToggleDark }) {
     setSidebarOpen(false);
   }
 
+  const activeConv = conv.conversations.find(c => c.id === conv.activeId);
+
   return (
     <div className={`app-root${isDark ? ' dark' : ''}`}>
       <Header
@@ -60,6 +64,8 @@ function ChatApp({ user, signOut, isDark, onToggleDark }) {
         onToggleDark={onToggleDark}
         isLoading={isLoading}
         onMenuToggle={() => setSidebarOpen(o => !o)}
+        hasMessages={messages.length > 0}
+        onExportShare={() => setShowExport(true)}
       />
 
       <div className="app-body">
@@ -79,8 +85,11 @@ function ChatApp({ user, signOut, isDark, onToggleDark }) {
           <ChatWindow
             messages={messages}
             isLoading={isLoading}
+            isStreaming={isStreaming}
+            followUps={followUps}
             onSelectSuggestion={handleSend}
             onRetry={retry}
+            onRegenerate={regenerate}
           />
           <InputArea
             onSend={handleSend}
@@ -89,26 +98,37 @@ function ChatApp({ user, signOut, isDark, onToggleDark }) {
           />
         </main>
       </div>
+
+      {/* Export / Share modal */}
+      {showExport && conv.activeId && (
+        <ExportShareModal
+          conversationId={conv.activeId}
+          conversationTitle={activeConv?.title}
+          messages={messages}
+          onClose={() => setShowExport(false)}
+        />
+      )}
     </div>
   );
 }
 
-// ── Root ───────────────────────────────────────────────────────────────────────
+// ── Root — handles share routing + auth gate ───────────────────────────────────
 export default function App() {
-  const { user, loading, signIn, signUp, signOut } = useAuth();
   const { isDark, toggle: toggleDark } = useDarkMode();
+
+  // Simple SPA routing: /share/:slug renders the public share page
+  const path = window.location.pathname;
+  if (path.startsWith('/share/')) {
+    const slug = path.slice(7).replace(/\/$/, '');
+    return <SharePage slug={slug} />;
+  }
+
+  const { user, loading, signOut } = useAuth();
 
   if (loading) return <LoadingScreen isDark={isDark} />;
 
   if (!user) {
-    return (
-      <LoginPage
-        isDark={isDark}
-        onToggleDark={toggleDark}
-        onSignIn={signIn}
-        onSignUp={signUp}
-      />
-    );
+    return <LoginPage isDark={isDark} onToggleDark={toggleDark} />;
   }
 
   return (

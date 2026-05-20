@@ -3,10 +3,11 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { CopyIcon, CheckIcon, ThumbUpIcon, ThumbDownIcon, RefreshIcon, UserIcon } from './Icons';
 
-function MessageBubble({ message, onRetry }) {
+function MessageBubble({ message, onRetry, onRegenerate }) {
   const isUser = message.role === 'user';
   const [copied, setCopied]     = useState(false);
-  const [feedback, setFeedback] = useState(null); // 'up' | 'down' | null
+  const [feedback, setFeedback] = useState(null);
+  const [regen, setRegen]       = useState(false);
 
   const time = new Date(message.timestamp).toLocaleTimeString([], {
     hour: '2-digit', minute: '2-digit',
@@ -20,9 +21,14 @@ function MessageBubble({ message, onRetry }) {
     } catch (_) {}
   }
 
+  async function handleRegenerate() {
+    setRegen(true);
+    await onRegenerate?.();
+    setRegen(false);
+  }
+
   return (
     <div className={`msg-row ${isUser ? 'user' : 'agent'}`}>
-      {/* Avatar */}
       <div className="msg-avatar">
         {isUser ? <UserIcon size={13} /> : <span>IBM</span>}
       </div>
@@ -30,12 +36,10 @@ function MessageBubble({ message, onRetry }) {
       <div className="msg-content">
         <div className="msg-name">{isUser ? 'You' : 'IBM Consulting AI'}</div>
 
-        {/* Bubble */}
         <div className={`msg-bubble${message.isError ? ' error' : ''}`}>
           {isUser ? (
             <span style={{ whiteSpace: 'pre-wrap' }}>{message.text}</span>
           ) : message.isStreaming && !message.text ? (
-            /* Typing dots shown before first word arrives */
             <div className="typing-dots">
               <span className="typing-dot" />
               <span className="typing-dot" />
@@ -43,9 +47,7 @@ function MessageBubble({ message, onRetry }) {
             </div>
           ) : (
             <div className="markdown">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {message.text}
-              </ReactMarkdown>
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.text}</ReactMarkdown>
               {message.isStreaming && <span className="streaming-cursor" />}
             </div>
           )}
@@ -57,7 +59,7 @@ function MessageBubble({ message, onRetry }) {
           )}
         </div>
 
-        {/* Hover actions */}
+        {/* Action bar — visible on hover */}
         {!message.isStreaming && message.text && !message.isError && (
           <div className="msg-actions">
             <button
@@ -84,6 +86,19 @@ function MessageBubble({ message, onRetry }) {
                 >
                   <ThumbDownIcon size={12} />
                 </button>
+
+                {/* Regenerate — only on last agent message (onRegenerate prop injected by ChatWindow) */}
+                {onRegenerate && (
+                  <button
+                    onClick={handleRegenerate}
+                    disabled={regen}
+                    className="action-btn"
+                    title="Regenerate response"
+                  >
+                    <RefreshIcon size={12} />
+                    {regen ? 'Regenerating…' : 'Regenerate'}
+                  </button>
+                )}
               </>
             )}
           </div>
